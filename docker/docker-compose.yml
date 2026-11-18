@@ -1,0 +1,84 @@
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: auction_mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+      - ../database/init_mongo.js:/docker-entrypoint-initdb.d/init_mongo.js:ro
+    restart: unless-stopped
+
+  shard1:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.shard
+    container_name: auction_shard_1
+    depends_on:
+      - mongodb
+    environment:
+      - SHARD_ID=1
+      - PORT=50051
+      - MONGO_URI=mongodb://mongodb:27017
+    ports:
+      - "50051:50051"
+    restart: unless-stopped
+
+  shard2:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.shard
+    container_name: auction_shard_2
+    depends_on:
+      - mongodb
+    environment:
+      - SHARD_ID=2
+      - PORT=50052
+      - MONGO_URI=mongodb://mongodb:27017
+    ports:
+      - "50052:50052"
+    restart: unless-stopped
+
+  gateway:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.gateway
+    container_name: auction_fastapi_gateway
+    depends_on:
+      - mongodb
+      - shard1
+      - shard2
+    environment:
+      - SHARD_HOSTS=shard1:50051,shard2:50052
+      - MONGO_URI=mongodb://mongodb:27017
+      - PORT=8000
+      - AUTO_SEED_IF_EMPTY=true
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  analytics:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.analytics
+    container_name: auction_pyspark_analytics
+    depends_on:
+      - mongodb
+    environment:
+      - MONGO_URI=mongodb://mongodb:27017
+      - ANALYTICS_INTERVAL_SEC=30
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+    container_name: auction_react_frontend
+    depends_on:
+      - gateway
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+
+volumes:
+  mongo_data:

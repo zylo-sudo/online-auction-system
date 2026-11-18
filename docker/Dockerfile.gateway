@@ -1,0 +1,19 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy proto, database seeder, and gateway backend
+COPY proto/ /app/proto/
+COPY database/ /app/database/
+COPY backend/gateway/ /app/
+
+RUN python -m grpc_tools.protoc -I/app/proto --python_out=/app/generated --grpc_python_out=/app/generated /app/proto/auction.proto && \
+    sed -i 's/import auction_pb2 as auction__pb2/from . import auction_pb2 as auction__pb2/' /app/generated/auction_pb2_grpc.py
+
+ENV PYTHONUNBUFFERED=1
+EXPOSE 8000
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
